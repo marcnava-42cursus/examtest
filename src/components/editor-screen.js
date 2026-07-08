@@ -396,7 +396,10 @@ class EditorScreen extends HTMLElement {
         }
 
         const currentBlock = state.blocks.find(b => b.lines.includes(state.currentIdx));
-        this.querySelector('#editor-block-name').textContent = currentBlock ? currentBlock.icon + ' ' + currentBlock.name : '';
+        const blockNameEl = this.querySelector('#editor-block-name');
+        const isExamMode = this.editorMode === 'easy-exam' || this.editorMode === 'real-exam' || this.editorMode === 'block-exam' || this.editorMode === 'block-easy-exam';
+        blockNameEl.textContent = isExamMode ? '' : (currentBlock ? currentBlock.icon + ' ' + currentBlock.name : '');
+        blockNameEl.style.display = isExamMode ? 'none' : '';
 
         let contextStart = 0;
         if ((this.editorMode === 'block-exam' || this.editorMode === 'block-easy-exam') && currentBlock) {
