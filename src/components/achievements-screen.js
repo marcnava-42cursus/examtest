@@ -65,14 +65,15 @@ class AchievementsScreen extends HTMLElement {
             <div class="text-[10px] font-semibold mt-1">${name}</div>
         `;
         el._iconEl = el.querySelector('.achievement-badge');
-        el._nameEl = el.querySelector('.text-[10px]');
+        el._nameEl = el.querySelector('.text-\\[10px\\]');
+        el._originalIcon = icon;
         this._applyBadgeState(el, unlocked);
         return el;
     }
 
     _applyBadgeState(el, unlocked) {
         el._iconEl.classList.toggle('unlocked', unlocked);
-        el._iconEl.textContent = unlocked ? el._iconEl.textContent : '🔒';
+        el._iconEl.textContent = unlocked ? el._originalIcon : '🔒';
         el._nameEl.style.color = unlocked ? 'var(--text)' : '#a0a0a0';
     }
 
@@ -84,9 +85,8 @@ class AchievementsScreen extends HTMLElement {
         for (const [id, el] of this._badgeMap) {
             const unlocked = !!state.achievements[id];
             const a = ACHIEVEMENTS_DEF.find(a => a.id === id);
-            if (a) {
-                el._iconEl.textContent = unlocked ? a.icon : '🔒';
-            }
+            if (a) el._originalIcon = a.icon;
+            el._iconEl.textContent = unlocked ? el._originalIcon : '🔒';
             this._applyBadgeState(el, unlocked);
         }
     }

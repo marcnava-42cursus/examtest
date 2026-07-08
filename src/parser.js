@@ -29,8 +29,11 @@ function detectBlocks() {
     const funcStarts = [];
     for (let li = 0; li < lines.length; li++) {
         const t = lines[li].text;
-        if (li + 1 < lines.length && lines[li + 1].text.trim() === '{' &&
-            lines[li].indent === 0 && /^(int|void|char|static)/.test(t) && /\)/.test(t)) {
+        const isFuncDecl = lines[li].indent === 0 && /^(int|void|char|static)/.test(t) && /\)/.test(t);
+        if (!isFuncDecl) continue;
+        const nextIsBrace = li + 1 < lines.length && lines[li + 1].text.trim() === '{';
+        const sameLineBrace = t.trim().endsWith('{');
+        if (nextIsBrace || sameLineBrace) {
             funcStarts.push(li);
         }
     }
@@ -53,8 +56,11 @@ function detectBlocks() {
         let end = start + 1;
         let depth = 0;
         for (let li = start; li < lines.length; li++) {
-            if (lines[li].text.trim() === '{') depth++;
-            if (lines[li].text.trim() === '}') { depth--; if (depth === 0) { end = li; break; } }
+            const openCount = (lines[li].text.match(/{/g) || []).length;
+            const closeCount = (lines[li].text.match(/}/g) || []).length;
+            depth += openCount;
+            depth -= closeCount;
+            if (depth === 0 && closeCount > 0) { end = li; break; }
         }
         const blockLines = [];
         const allLines = [];

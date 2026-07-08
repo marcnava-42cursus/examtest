@@ -4,12 +4,36 @@ import { tokenize, getTokenClass } from '../parser.js';
 class CodeScreen extends HTMLElement {
     connectedCallback() {
         this._boundRender = () => this.render();
+        this._boundExpand = () => {
+            const container = this.closest('[class*="max-w-lg"]');
+            if (container && !this._expanded) {
+                this._savedMaxWidth = container.style.maxWidth;
+                container.style.maxWidth = '100%';
+                this._expanded = true;
+            }
+        };
+        this._boundRestore = (e) => {
+            if (e.target !== this && this._expanded) {
+                const container = this.closest('[class*="max-w-lg"]');
+                if (container) container.style.maxWidth = this._savedMaxWidth || '';
+                this._expanded = false;
+            }
+        };
         this.addEventListener('screen-active', this._boundRender);
+        this.addEventListener('screen-active', this._boundExpand);
+        document.addEventListener('screen-active', this._boundRestore);
         this.render();
     }
 
     disconnectedCallback() {
         this.removeEventListener('screen-active', this._boundRender);
+        this.removeEventListener('screen-active', this._boundExpand);
+        document.removeEventListener('screen-active', this._boundRestore);
+        if (this._expanded) {
+            const container = this.closest('[class*="max-w-lg"]');
+            if (container) container.style.maxWidth = this._savedMaxWidth || '';
+            this._expanded = false;
+        }
     }
 
     render() {
@@ -26,7 +50,7 @@ class CodeScreen extends HTMLElement {
                 <h2 class="text-lg font-bold">Código</h2>
                 <span class="text-xs" style="color:var(--text-dim)">${state.lines.filter(l => l.quiz).length} líneas · ${state.blocks.length} bloques</span>
             </div>
-            <div class="code-font" style="font-size:12px;line-height:1.6" id="code-lines"></div>
+            <div class="code-font" style="font-size:12px;line-height:1.6;overflow-x:auto" id="code-lines"></div>
         `;
 
         const container = this.querySelector('#code-lines');

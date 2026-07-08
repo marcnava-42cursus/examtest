@@ -23,8 +23,10 @@ class AppState {
         this.exercisesGenerated = false;
         this.todayMissionDone = 0;
         this.excludedBlocks = new Set();
+        this.excludedLines = new Set();
         this.examMode = 'practice';
         this.examRealPassed = new Set();
+        this.modeCompleted = { practice: new Set(), easy: new Set(), real: new Set() };
     }
 
     save() {
@@ -45,7 +47,13 @@ class AppState {
             exercisesGenerated: this.exercisesGenerated,
             todayMissionDone: this.todayMissionDone,
             excludedBlocks: [...this.excludedBlocks],
-            examRealPassed: [...this.examRealPassed]
+            excludedLines: [...this.excludedLines],
+            examRealPassed: [...this.examRealPassed],
+            modeCompleted: {
+                practice: [...this.modeCompleted.practice],
+                easy: [...this.modeCompleted.easy],
+                real: [...this.modeCompleted.real]
+            }
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     }
@@ -79,7 +87,13 @@ class AppState {
         this.exercisesGenerated = data.exercisesGenerated || false;
         this.todayMissionDone = data.todayMissionDone || 0;
         this.excludedBlocks = new Set(data.excludedBlocks || []);
+        this.excludedLines = new Set(data.excludedLines || []);
         this.examRealPassed = new Set(data.examRealPassed || []);
+        this.modeCompleted = {
+            practice: new Set(data.modeCompleted?.practice || []),
+            easy: new Set(data.modeCompleted?.easy || []),
+            real: new Set(data.modeCompleted?.real || [])
+        };
         this.checkStreak();
         this.save();
     }

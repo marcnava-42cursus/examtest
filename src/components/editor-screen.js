@@ -96,6 +96,7 @@ function appendHighlighted(container, text) {
 }
 
 function isLineExcluded(lineIdx) {
+    if (state.excludedLines.has(lineIdx)) return true;
     for (let bi = 0; bi < state.blocks.length; bi++) {
         if (state.excludedBlocks.has(bi) && state.blocks[bi].lines.includes(lineIdx)) {
             return true;
@@ -362,8 +363,17 @@ class EditorScreen extends HTMLElement {
             this.querySelector('#btn-solution').classList.add('hidden');
         }
 
-        const total = state.lines.filter(l => l.quiz).length;
-        const donePct = total > 0 ? (state.completedLines.size / total * 100) : 0;
+        let total, doneCount;
+        const isBlockFlow = this.editorMode === 'block' || this.editorMode === 'block-exam' || this.editorMode === 'block-easy-exam';
+        if (isBlockFlow && this.examBlockIndex >= 0) {
+            const block = state.blocks[this.examBlockIndex];
+            total = block ? block.lines.filter(li => state.lines[li].quiz).length : 0;
+            doneCount = block ? block.lines.filter(li => state.completedLines.has(li)).length : 0;
+        } else {
+            total = state.lines.filter(l => l.quiz).length;
+            doneCount = state.modeCompleted[this.modePrefix()].size;
+        }
+        const donePct = total > 0 ? (doneCount / total * 100) : 0;
         this.querySelector('#editor-bar').style.width = donePct + '%';
         this.querySelector('#editor-xp').textContent = this.sessionXP + ' XP';
 
@@ -574,6 +584,7 @@ class EditorScreen extends HTMLElement {
             if (!isExam || isBlockExam) {
                 state.completedLines.add(state.currentIdx);
             }
+            state.modeCompleted[this.modePrefix()].add(state.currentIdx);
             state.consecutiveCorrect++;
             state.sessionLinesCompleted++;
             state.todayMissionDone++;
@@ -601,10 +612,10 @@ class EditorScreen extends HTMLElement {
             checkAchievement('general_ten_streak', state.consecutiveCorrect >= 10);
             const pfx = this.modePrefix();
             const quizLines = state.lines.filter(l => l.quiz).length;
-            const completed = state.completedLines.size;
-            checkAchievement(pfx + '_half_file', completed >= Math.floor(quizLines / 2));
-            checkAchievement(pfx + '_pct_25', completed >= Math.floor(quizLines * 0.25));
-            checkAchievement(pfx + '_pct_75', completed >= Math.floor(quizLines * 0.75));
+            const modeCompleted = state.modeCompleted[pfx].size;
+            checkAchievement(pfx + '_pct_25', modeCompleted >= Math.floor(quizLines * 0.25));
+            checkAchievement(pfx + '_half_file', modeCompleted >= Math.floor(quizLines / 2));
+            checkAchievement(pfx + '_pct_75', modeCompleted >= Math.floor(quizLines * 0.75));
 
             if (!isExam) {
                 const block = state.blocks.find(b => b.lines.includes(state.currentIdx));
@@ -849,8 +860,9 @@ class EditorScreen extends HTMLElement {
             if (state.currentIdx >= state.lines.length) {
                 const totalQuiz = state.lines.filter(l => l.quiz).length;
                 const excludedQuiz = state.lines.filter((l, i) => l.quiz && isLineExcluded(i)).length;
-                if (state.completedLines.size >= totalQuiz - excludedQuiz) {
-                    checkAchievement(this.modePrefix() + '_full_file', true);
+                const pfx = this.modePrefix();
+                if (state.modeCompleted[pfx].size >= totalQuiz - excludedQuiz) {
+                    checkAchievement(pfx + '_full_file', true);
                     addXP(500);
                     this.sessionXP += 500;
                     this.showComplete();
@@ -869,7 +881,12 @@ class EditorScreen extends HTMLElement {
         const codeEl = this.querySelector('#editor-code');
         codeEl.innerHTML = '';
 
-        state.lines.forEach((l, i) => { if (l.quiz) state.completedLines.add(i); });
+        state.lines.forEach((l, i) => {
+            if (l.quiz) {
+                state.completedLines.add(i);
+                state.modeCompleted[this.modePrefix()].add(i);
+            }
+        });
         if (this.editorMode === 'real-exam' && this.examErrors === 0) {
             state.blocks.forEach((_, bi) => state.examRealPassed.add(bi));
         }

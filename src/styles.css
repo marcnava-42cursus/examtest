@@ -46,6 +46,10 @@ body {
     display: none;
 }
 
+#screen-code.active {
+    overflow-x: hidden;
+}
+
 .msv-line {
     display: grid;
     grid-template-columns: 44px minmax(0, 1fr);
