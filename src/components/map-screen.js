@@ -18,6 +18,7 @@ class MapScreen extends HTMLElement {
         this.innerHTML = '<h2 class="text-lg font-bold mb-4">Camino del código</h2><div id="map-container" class="flex flex-col items-center gap-0"></div>';
         this._container = this.querySelector('#map-container');
         this._nodeRefs = [];
+        this._lastMode = '';
         this._update();
     }
 
@@ -41,7 +42,7 @@ class MapScreen extends HTMLElement {
             return;
         }
 
-        if (this._nodeRefs.length !== state.blocks.length) {
+        if (this._nodeRefs.length !== state.blocks.length || state.examMode !== this._lastMode) {
             this._rebuildMap();
             return;
         }
@@ -80,6 +81,7 @@ class MapScreen extends HTMLElement {
     }
 
     _rebuildMap() {
+        this._lastMode = state.examMode;
         this._container.innerHTML = '';
         this._nodeRefs = [];
         const mode = state.examMode;
@@ -126,9 +128,19 @@ class MapScreen extends HTMLElement {
             `;
             if (!isLocked) {
                 node.addEventListener('click', () => {
-                    window.dispatchEvent(new CustomEvent('start-mode', {
-                        detail: { mode: 'block', blockIndex: bi }
-                    }));
+                    if (mode === 'practice') {
+                        window.dispatchEvent(new CustomEvent('start-mode', {
+                            detail: { mode: 'block', blockIndex: bi }
+                        }));
+                    } else if (mode === 'easy-exam') {
+                        window.dispatchEvent(new CustomEvent('start-mode', {
+                            detail: { mode: 'block-easy-exam', blockIndex: bi }
+                        }));
+                    } else {
+                        window.dispatchEvent(new CustomEvent('start-mode', {
+                            detail: { mode: 'block-exam', blockIndex: bi }
+                        }));
+                    }
                 });
             }
             this._container.appendChild(node);

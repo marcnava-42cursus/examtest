@@ -161,7 +161,7 @@ class AdminScreen extends HTMLElement {
                 row.onmouseleave = function () { this.style.background = ''; };
 
                 row.innerHTML = `
-                    <input type="checkbox" ${lineChecked ? 'checked' : ''} data-line="${li}" class="line-cb" style="cursor:pointer;width:16px;height:16px;flex-shrink:0" ${isExcluded ? 'disabled' : ''}>
+                    <input type="checkbox" ${lineChecked || isExcluded ? 'checked' : ''} data-line="${li}" class="line-cb" style="cursor:pointer;width:16px;height:16px;flex-shrink:0" ${isExcluded ? 'disabled' : ''}>
                     <span class="msv-gutter" style="min-width:28px;flex-shrink:0;font-size:10px;color:#555;text-align:right;padding-right:6px;user-select:none">${li + 1}</span>
                     <span class="code-font" style="font-size:12px;line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:1px 0;min-width:0">${codeHtml}</span>
                 `;

@@ -514,20 +514,15 @@ class EditorScreen extends HTMLElement {
         const content = row.querySelector('.msv-content');
         content.textContent = '    '.repeat(activeLine.indent);
 
-        this.lineInput = document.createElement('textarea');
+        this.lineInput = document.createElement('input');
+        this.lineInput.type = 'text';
         this.lineInput.className = 'msv-input';
         this.lineInput.style.width = '100%';
-        this.lineInput.style.height = 'auto';
-        this.lineInput.style.minHeight = '26px';
         this.lineInput.style.textAlign = 'left';
-        this.lineInput.style.resize = 'none';
-        this.lineInput.style.overflow = 'hidden';
         this.lineInput.style.padding = '2px 6px';
         this.lineInput.style.fontFamily = "'Fira Code', monospace";
         this.lineInput.style.fontSize = '13px';
         this.lineInput.style.lineHeight = '1.7';
-        this.lineInput.style.whiteSpace = 'pre';
-        this.lineInput.style.tabSize = '4';
         this.lineInput.spellcheck = false;
         this.lineInput.autocomplete = 'off';
         this.lineInput.dataset.expected = activeLine.text;
@@ -546,11 +541,6 @@ class EditorScreen extends HTMLElement {
                 e.stopPropagation();
                 this.checkLineAnswer();
             }
-        });
-
-        this.lineInput.addEventListener('input', () => {
-            this.lineInput.style.height = 'auto';
-            this.lineInput.style.height = this.lineInput.scrollHeight + 'px';
         });
     }
 
@@ -869,9 +859,14 @@ class EditorScreen extends HTMLElement {
                     state.markSessionActive();
                     addXP(20);
                     this.sessionXP += 20;
+                    checkAchievement(this.modePrefix() + '_no_hints', state.sessionNoHints);
+                    switchTab('dashboard');
+                } else if (this.editorMode === 'block') {
+                    this.showBlockComplete();
+                } else {
+                    checkAchievement(this.modePrefix() + '_no_hints', state.sessionNoHints);
+                    switchTab('dashboard');
                 }
-                checkAchievement(this.modePrefix() + '_no_hints', state.sessionNoHints);
-                switchTab('dashboard');
                 return;
             }
         } else {
@@ -935,15 +930,72 @@ class EditorScreen extends HTMLElement {
             ${subtitle}
             <div class="text-sm" style="color:#a0a0a0">${this.examErrors} errores</div>
             <button class="w-48 py-3 rounded-xl font-bold text-white" style="background:var(--blue)" id="exam-return">Volver al inicio</button>
-            <button class="w-48 py-3 rounded-xl font-bold" style="background:var(--bg-card);color:#a0a0a0" id="exam-repeat">Repetir examen</button>
+            <button class="w-48 py-3 rounded-xl font-bold" style="background:var(--bg-card);color:#a0a0a0" id="exam-repeat">Repetir</button>
+            <div class="text-xs" style="color:#a0a0a0;margin-top:4px">Presiona <kbd style="background:var(--bg-input);padding:1px 6px;border-radius:3px;border:1px solid var(--border)">Enter</kbd> para repetir</div>
         `;
         codeEl.appendChild(el);
         this.querySelector('#btn-check').classList.add('hidden');
         this.querySelector('#btn-solution').classList.add('hidden');
+
+        const examRepeatBtn = el.querySelector('#exam-repeat');
+        examRepeatBtn.focus();
+
         el.querySelector('#exam-return').addEventListener('click', () => switchTab('dashboard'));
-        el.querySelector('#exam-repeat').addEventListener('click', () => {
+        examRepeatBtn.addEventListener('click', () => {
+            if (isBlockExam) {
+                const block = state.blocks[this.examBlockIndex];
+                if (block) {
+                    block.lines.forEach(i => {
+                        state.completedLines.delete(i);
+                        state.modeCompleted[this.modePrefix()].delete(i);
+                    });
+                    state.save();
+                }
+            }
             window.dispatchEvent(new CustomEvent('start-mode', {
                 detail: isBlockExam ? { mode: this.editorMode, blockIndex: this.examBlockIndex } : { mode: this.editorMode }
+            }));
+        });
+    }
+
+    showBlockComplete() {
+        const codeEl = this.querySelector('#editor-code');
+        codeEl.innerHTML = '';
+
+        const bi = this.examBlockIndex;
+        const block = bi >= 0 ? state.blocks[bi] : null;
+        const name = block ? block.name : 'Función';
+        const icon = block ? block.icon : '🎯';
+
+        const el = document.createElement('div');
+        el.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:12px';
+        el.innerHTML = `
+            <div class="text-5xl">${icon}</div>
+            <div class="text-xl font-bold" style="color:var(--green)">${name} dominada</div>
+            <div style="color:var(--yellow);font-size:13px">✅ Sin errores</div>
+            <button class="w-48 py-3 rounded-xl font-bold text-white" style="background:var(--blue)" id="block-return">Volver al inicio</button>
+            <button class="w-48 py-3 rounded-xl font-bold" style="background:var(--bg-card);color:#a0a0a0" id="block-repeat">Repasar</button>
+            <div class="text-xs" style="color:#a0a0a0;margin-top:4px">Presiona <kbd style="background:var(--bg-input);padding:1px 6px;border-radius:3px;border:1px solid var(--border)">Enter</kbd> para repetir</div>
+        `;
+        codeEl.appendChild(el);
+        this.querySelector('#btn-check').classList.add('hidden');
+        this.querySelector('#btn-solution').classList.add('hidden');
+
+        const repeatBtn = el.querySelector('#block-repeat');
+        repeatBtn.focus();
+
+        el.querySelector('#block-return').addEventListener('click', () => switchTab('dashboard'));
+        repeatBtn.addEventListener('click', () => {
+            const block = state.blocks[this.examBlockIndex];
+            if (block) {
+                block.lines.forEach(i => {
+                    state.completedLines.delete(i);
+                    state.modeCompleted[this.modePrefix()].delete(i);
+                });
+                state.save();
+            }
+            window.dispatchEvent(new CustomEvent('start-mode', {
+                detail: { mode: 'block', blockIndex: this.examBlockIndex }
             }));
         });
     }
