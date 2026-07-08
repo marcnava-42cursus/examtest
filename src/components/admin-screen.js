@@ -5,8 +5,13 @@ import { showToast } from './toast-container.js';
 
 class AdminScreen extends HTMLElement {
     connectedCallback() {
-        this.addEventListener('screen-active', () => this.refresh());
+        this._boundRefresh = () => this.refresh();
+        this.addEventListener('screen-active', this._boundRefresh);
         this.render();
+    }
+
+    disconnectedCallback() {
+        this.removeEventListener('screen-active', this._boundRefresh);
     }
 
     render() {
@@ -17,7 +22,7 @@ class AdminScreen extends HTMLElement {
             </div>
             <div class="space-y-4">
                 <div>
-                    <label class="block text-sm font-semibold mb-2">Cargar mini_serv_rf.c</label>
+                    <label class="block text-sm font-semibold mb-2">Cargar código (.c / .h)</label>
                     <input type="file" id="file-training" accept=".c,.h,.txt" class="text-xs mb-2 block">
                     <textarea id="paste-training" rows="6" class="w-full rounded-lg p-3 code-font text-xs resize-y"
                         style="background:var(--bg-input);border:1px solid var(--border);color:var(--text)"

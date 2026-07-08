@@ -106,7 +106,13 @@ class AppState {
     }
 
     notify() {
-        window.dispatchEvent(new CustomEvent('state-changed'));
+        if (!this._notifyPending) {
+            this._notifyPending = true;
+            queueMicrotask(() => {
+                this._notifyPending = false;
+                window.dispatchEvent(new CustomEvent('state-changed'));
+            });
+        }
     }
 }
 

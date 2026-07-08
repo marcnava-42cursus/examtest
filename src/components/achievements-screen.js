@@ -5,14 +5,20 @@ const BLOCK_ICONS = ['💀', '✉️', '🔗', '🔌', '📢', '🖥️', '👤'
 
 class AchievementsScreen extends HTMLElement {
     connectedCallback() {
-        window.addEventListener('state-changed', () => this.render());
-        this.addEventListener('screen-active', () => this.render());
-        this.render();
+        this._boundRender = () => this.render();
+        window.addEventListener('state-changed', this._boundRender);
+        this.addEventListener('screen-active', this._boundRender);
+        this._init();
     }
 
-    render() {
+    disconnectedCallback() {
+        window.removeEventListener('state-changed', this._boundRender);
+        this.removeEventListener('screen-active', this._boundRender);
+    }
+
+    _init() {
         this.innerHTML = `<h2 class="text-lg font-bold mb-4">Logros</h2>`;
-        const container = this;
+        this._badgeMap = new Map();
 
         ACHIEVEMENT_CATEGORIES.forEach(cat => {
             const sec = document.createElement('div');
@@ -22,31 +28,67 @@ class AchievementsScreen extends HTMLElement {
             grid.className = 'grid grid-cols-3 gap-4';
 
             ACHIEVEMENTS_DEF.filter(a => a.category === cat.id).forEach(a => {
-                const unlocked = !!state.achievements[a.id];
-                this.appendBadge(grid, unlocked ? a.icon : '🔒', a.name, unlocked);
+                const el = this._createBadge(a.icon, a.name, !!state.achievements[a.id]);
+                this._badgeMap.set(a.id, el);
+                grid.appendChild(el);
             });
 
             if (cat.id !== 'general') {
-                state.blocks.forEach((block, bi) => {
-                    const unlocked = !!state.achievements[cat.id + '_block_' + bi];
-                    const icon = block ? (BLOCK_ICONS[bi % BLOCK_ICONS.length] || '📄') : '📄';
-                    this.appendBadge(grid, unlocked ? icon : '🔒', block.name, unlocked);
-                });
+                sec._blockCatId = cat.id;
+                sec._blockGrid = grid;
+                this._renderBlockBadges(sec, cat.id, grid);
             }
 
             sec.appendChild(grid);
-            container.appendChild(sec);
+            this.appendChild(sec);
+        });
+
+        this._update();
+    }
+
+    _renderBlockBadges(sec, catId, grid) {
+        state.blocks.forEach((block, bi) => {
+            const id = catId + '_block_' + bi;
+            const unlocked = !!state.achievements[id];
+            const icon = block ? (BLOCK_ICONS[bi % BLOCK_ICONS.length] || '📄') : '📄';
+            const el = this._createBadge(icon, block.name, unlocked);
+            this._badgeMap.set(id, el);
+            grid.appendChild(el);
         });
     }
 
-    appendBadge(grid, icon, name, unlocked) {
+    _createBadge(icon, name, unlocked) {
         const el = document.createElement('div');
         el.className = 'flex flex-col items-center gap-1 text-center';
         el.innerHTML = `
-            <div class="achievement-badge ${unlocked ? 'unlocked' : ''}">${icon}</div>
-            <div class="text-[10px] font-semibold mt-1" style="color:${unlocked ? 'var(--text)' : '#a0a0a0'}">${name}</div>
+            <div class="achievement-badge">${icon}</div>
+            <div class="text-[10px] font-semibold mt-1">${name}</div>
         `;
-        grid.appendChild(el);
+        el._iconEl = el.querySelector('.achievement-badge');
+        el._nameEl = el.querySelector('.text-[10px]');
+        this._applyBadgeState(el, unlocked);
+        return el;
+    }
+
+    _applyBadgeState(el, unlocked) {
+        el._iconEl.classList.toggle('unlocked', unlocked);
+        el._iconEl.textContent = unlocked ? el._iconEl.textContent : '🔒';
+        el._nameEl.style.color = unlocked ? 'var(--text)' : '#a0a0a0';
+    }
+
+    render() {
+        this._update();
+    }
+
+    _update() {
+        for (const [id, el] of this._badgeMap) {
+            const unlocked = !!state.achievements[id];
+            const a = ACHIEVEMENTS_DEF.find(a => a.id === id);
+            if (a) {
+                el._iconEl.textContent = unlocked ? a.icon : '🔒';
+            }
+            this._applyBadgeState(el, unlocked);
+        }
     }
 }
 customElements.define('achievements-screen', AchievementsScreen);

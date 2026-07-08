@@ -8,7 +8,7 @@ export const LEVELS = [
     { name: 'Buffers domesticados', xp: 1500 },
     { name: 'Main en marcha', xp: 2200 },
     { name: 'Archivo casi entero', xp: 3200 },
-    { name: 'mini_serv sin mirar', xp: 4500 }
+    { name: 'Código sin mirar', xp: 4500 }
 ];
 
 export const BLOCK_DEFS = [

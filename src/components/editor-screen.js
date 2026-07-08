@@ -4,22 +4,7 @@ import { addXP, getLevel, checkAchievement } from '../xp.js';
 import { switchTab, exitEditor } from '../router.js';
 import { KEYWORDS, TYPES, FUNCTIONS } from '../constants.js';
 
-let sessionXP = 0;
-let editorMode = 'continue';
-let reviewQueue = [];
-let lineInput = null;
-let waitingForRetry = false;
-let hintVisible = true;
-let retryCleanup = null;
-let examErrors = 0;
-let examBlockIndex = -1;
-let reviewCorrectCount = 0;
 
-function modePrefix() {
-    if (editorMode === 'easy-exam' || editorMode === 'block-easy-exam') return 'easy';
-    if (editorMode === 'real-exam' || editorMode === 'block-exam') return 'real';
-    return 'practice';
-}
 
 function createLine(num, active) {
     const row = document.createElement('div');
@@ -125,7 +110,15 @@ function skipToNextQuiz() {
     }
 }
 
-function generateGaps(text) {
+function seededRandom(seedVal) {
+    let s = (seedVal * 1103515245 + 12345) | 0;
+    return function () {
+        s = (s * 1103515245 + 12345) | 0;
+        return ((s >>> 16) & 0x7FFF) / 0x8000;
+    };
+}
+
+function generateGaps(text, seed) {
     const tokens = [];
     let idx = 0;
     while (idx < text.length) {
@@ -165,10 +158,12 @@ function generateGaps(text) {
     } else if (n === 1) {
         gapIndices = [gapable[0]];
     } else {
-        const numGaps = 1 + Math.floor(Math.random() * (n - 1));
+        const gapSeed = seed != null ? seed : text.length;
+        const rng = seededRandom(gapSeed);
+        const numGaps = 1 + Math.floor(rng() * (n - 1));
         const shuffled = [...gapable];
         for (let i = shuffled.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
+            const j = Math.floor(rng() * (i + 1));
             [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
         }
         gapIndices = shuffled.slice(0, numGaps).sort((a, b) => a - b);
@@ -182,13 +177,42 @@ function generateGaps(text) {
 }
 
 class EditorScreen extends HTMLElement {
+    constructor() {
+        super();
+        this.sessionXP = 0;
+        this.editorMode = 'continue';
+        this.reviewQueue = [];
+        this.lineInput = null;
+        this.waitingForRetry = false;
+        this.hintVisible = true;
+        this.retryCleanup = null;
+        this.examErrors = 0;
+        this.examBlockIndex = -1;
+        this.reviewCorrectCount = 0;
+    }
+
+    modePrefix() {
+        if (this.editorMode === 'easy-exam' || this.editorMode === 'block-easy-exam') return 'easy';
+        if (this.editorMode === 'real-exam' || this.editorMode === 'block-exam') return 'real';
+        return 'practice';
+    }
+
     connectedCallback() {
-        window.addEventListener('start-mode', (e) => this.startMode(e.detail));
-        this.addEventListener('screen-active', () => {
-            if (lineInput && !lineInput.disabled) lineInput.focus();
-        });
-        document.addEventListener('keydown', (e) => this.handleGlobalKeydown(e));
+        this._boundStartMode = (e) => this.startMode(e.detail);
+        this._boundScreenActive = () => {
+            if (this.lineInput && !this.lineInput.disabled) this.lineInput.focus();
+        };
+        this._boundKeydown = (e) => this.handleGlobalKeydown(e);
+        window.addEventListener('start-mode', this._boundStartMode);
+        this.addEventListener('screen-active', this._boundScreenActive);
+        document.addEventListener('keydown', this._boundKeydown);
         this.renderShell();
+    }
+
+    disconnectedCallback() {
+        window.removeEventListener('start-mode', this._boundStartMode);
+        this.removeEventListener('screen-active', this._boundScreenActive);
+        document.removeEventListener('keydown', this._boundKeydown);
     }
 
     renderShell() {
@@ -221,8 +245,6 @@ class EditorScreen extends HTMLElement {
         this.querySelector('#editor-close').addEventListener('click', () => exitEditor());
         this.querySelector('#btn-check').addEventListener('click', () => this.checkLineAnswer());
         this.querySelector('#btn-solution').addEventListener('click', () => this.handleSolution());
-
-        if (window.lucide) lucide.createIcons();
     }
 
     handleGlobalKeydown(e) {
@@ -230,32 +252,32 @@ class EditorScreen extends HTMLElement {
         if (!isActive) return;
 
         if ((e.key === 'h' || e.key === 'H') && (e.ctrlKey || e.metaKey)) {
-            if (!lineInput || editorMode === 'easy-exam' || editorMode === 'real-exam' || editorMode === 'block-exam' || editorMode === 'block-easy-exam') return;
-            hintVisible = !hintVisible;
+            if (!this.lineInput || this.editorMode === 'easy-exam' || this.editorMode === 'real-exam' || this.editorMode === 'block-exam' || this.editorMode === 'block-easy-exam') return;
+            this.hintVisible = !this.hintVisible;
             const hintLine = this.querySelector('#hint-line');
-            if (hintLine) hintLine.style.display = hintVisible ? '' : 'none';
+            if (hintLine) hintLine.style.display = this.hintVisible ? '' : 'none';
             e.preventDefault();
         }
 
-        if (e.key === 'Enter' && waitingForRetry) {
+        if (e.key === 'Enter' && this.waitingForRetry) {
             e.preventDefault();
-            waitingForRetry = false;
-            if (retryCleanup) {
-                retryCleanup();
-                retryCleanup = null;
+            this.waitingForRetry = false;
+            if (this.retryCleanup) {
+                this.retryCleanup();
+                this.retryCleanup = null;
             }
         }
     }
 
     startMode(detail) {
         const mode = detail.mode;
-        editorMode = mode;
-        sessionXP = 0;
-        hintVisible = true;
-        waitingForRetry = false;
-        retryCleanup = null;
-        examErrors = 0;
-        examBlockIndex = -1;
+        this.editorMode = mode;
+        this.sessionXP = 0;
+        this.hintVisible = true;
+        this.waitingForRetry = false;
+        this.retryCleanup = null;
+        this.examErrors = 0;
+        this.examBlockIndex = -1;
         state.sessionLinesCompleted = 0;
         state.sessionNoHints = true;
 
@@ -278,16 +300,16 @@ class EditorScreen extends HTMLElement {
             state.currentIdx = 0;
             skipToNextQuiz();
         } else if (mode === 'review') {
-            reviewQueue = Object.keys(state.failedLines).map(Number).filter(i => !isLineExcluded(i)).sort(() => Math.random() - 0.5);
-            if (reviewQueue.length === 0) { switchTab('dashboard'); return; }
-            state.currentIdx = reviewQueue.shift();
-            reviewCorrectCount = 0;
+            this.reviewQueue = Object.keys(state.failedLines).map(Number).filter(i => !isLineExcluded(i)).sort(() => Math.random() - 0.5);
+            if (this.reviewQueue.length === 0) { switchTab('dashboard'); return; }
+            state.currentIdx = this.reviewQueue.shift();
+            this.reviewCorrectCount = 0;
         } else if (mode === 'quick') {
             const quizLines = state.lines.map((l, i) => l.quiz && !isLineExcluded(i) ? i : -1).filter(i => i >= 0);
-            reviewQueue = quizLines.sort(() => Math.random() - 0.5).slice(0, 5);
-            if (reviewQueue.length === 0) { switchTab('dashboard'); return; }
-            state.currentIdx = reviewQueue.shift();
-            reviewCorrectCount = 0;
+            this.reviewQueue = quizLines.sort(() => Math.random() - 0.5).slice(0, 5);
+            if (this.reviewQueue.length === 0) { switchTab('dashboard'); return; }
+            state.currentIdx = this.reviewQueue.shift();
+            this.reviewCorrectCount = 0;
         } else if (mode === 'easy-exam' || mode === 'real-exam') {
             state.currentIdx = 0;
             skipToNextQuiz();
@@ -298,22 +320,22 @@ class EditorScreen extends HTMLElement {
         } else if (mode === 'block-exam' || mode === 'block-easy-exam') {
             const bi = detail.blockIndex;
             if (bi === undefined || !state.blocks[bi]) { switchTab('dashboard'); return; }
-            examBlockIndex = bi;
+            this.examBlockIndex = bi;
             const blockQuizLines = state.blocks[bi].lines.filter(li => state.lines[li].quiz);
             if (blockQuizLines.length === 0) { switchTab('dashboard'); return; }
-            reviewQueue = [...blockQuizLines];
-            state.currentIdx = reviewQueue.shift();
+            this.reviewQueue = [...blockQuizLines];
+            state.currentIdx = this.reviewQueue.shift();
         } else if (mode === 'block') {
             const bi = detail.blockIndex;
-            examBlockIndex = bi;
+            this.examBlockIndex = bi;
             const block = state.blocks[bi];
             const blockQuizLines = block.lines.filter(li => state.lines[li].quiz);
             if (state.excludedBlocks.has(bi) || blockQuizLines.every(li => state.completedLines.has(li))) {
                 return;
             }
-            reviewQueue = [...blockQuizLines];
-            if (reviewQueue.length === 0) return;
-            state.currentIdx = reviewQueue.shift();
+            this.reviewQueue = [...blockQuizLines];
+            if (this.reviewQueue.length === 0) return;
+            state.currentIdx = this.reviewQueue.shift();
         }
 
         switchTab('editor');
@@ -328,13 +350,13 @@ class EditorScreen extends HTMLElement {
         }
         const codeEl = this.querySelector('#editor-code');
         codeEl.innerHTML = '';
-        lineInput = null;
-        waitingForRetry = false;
-        retryCleanup = null;
+        this.lineInput = null;
+        this.waitingForRetry = false;
+        this.retryCleanup = null;
         this.querySelector('#btn-check').classList.remove('hidden');
         this.querySelector('#btn-solution').classList.remove('hidden');
 
-        const isExam = editorMode === 'easy-exam' || editorMode === 'real-exam' || editorMode === 'block-exam' || editorMode === 'block-easy-exam';
+        const isExam = this.editorMode === 'easy-exam' || this.editorMode === 'real-exam' || this.editorMode === 'block-exam' || this.editorMode === 'block-easy-exam';
 
         if (isExam) {
             this.querySelector('#btn-solution').classList.add('hidden');
@@ -343,19 +365,19 @@ class EditorScreen extends HTMLElement {
         const total = state.lines.filter(l => l.quiz).length;
         const donePct = total > 0 ? (state.completedLines.size / total * 100) : 0;
         this.querySelector('#editor-bar').style.width = donePct + '%';
-        this.querySelector('#editor-xp').textContent = sessionXP + ' XP';
+        this.querySelector('#editor-xp').textContent = this.sessionXP + ' XP';
 
         const badge = this.querySelector('#editor-mode-badge');
-        if (editorMode === 'easy-exam') {
+        if (this.editorMode === 'easy-exam') {
             badge.textContent = '📝 Examen fácil';
             badge.style.color = 'var(--blue)';
-        } else if (editorMode === 'real-exam') {
+        } else if (this.editorMode === 'real-exam') {
             badge.textContent = '🎯 Examen real';
             badge.style.color = 'var(--red)';
-        } else if (editorMode === 'block-exam') {
+        } else if (this.editorMode === 'block-exam') {
             badge.textContent = '🎯 Examen función';
             badge.style.color = 'var(--purple)';
-        } else if (editorMode === 'block-easy-exam') {
+        } else if (this.editorMode === 'block-easy-exam') {
             badge.textContent = '📝 Examen función fácil';
             badge.style.color = 'var(--blue)';
         } else {
@@ -367,7 +389,7 @@ class EditorScreen extends HTMLElement {
         this.querySelector('#editor-block-name').textContent = currentBlock ? currentBlock.icon + ' ' + currentBlock.name : '';
 
         let contextStart = 0;
-        if ((editorMode === 'block-exam' || editorMode === 'block-easy-exam') && currentBlock) {
+        if ((this.editorMode === 'block-exam' || this.editorMode === 'block-easy-exam') && currentBlock) {
             contextStart = currentBlock.allLines[0];
         }
         this.querySelector('#editor-line-info').textContent = `Línea ${state.currentIdx + 1}/${state.lines.length}`;
@@ -388,8 +410,8 @@ class EditorScreen extends HTMLElement {
 
         const activeLine = state.lines[state.currentIdx];
 
-        if (editorMode === 'easy-exam' || editorMode === 'block-easy-exam') {
-            const gaps = generateGaps(activeLine.text);
+        if (this.editorMode === 'easy-exam' || this.editorMode === 'block-easy-exam') {
+            const gaps = generateGaps(activeLine.text, state.currentIdx);
             const gapRow = createLine(state.currentIdx + 1, true);
             const gapContent = gapRow.querySelector('.msv-content');
             gapContent.textContent = '    '.repeat(activeLine.indent);
@@ -440,7 +462,7 @@ class EditorScreen extends HTMLElement {
                 if (e.key === 'Enter') {
                     e.preventDefault();
                     e.stopPropagation();
-                    lineInput = gapInputs[0];
+                    this.lineInput = gapInputs[0];
                     this.checkLineAnswer();
                 }
             };
@@ -464,8 +486,8 @@ class EditorScreen extends HTMLElement {
             });
 
             if (gapInputs.length > 0) {
-                lineInput = gapInputs[0];
-                lineInput.dataset.expected = expectedGaps;
+                this.lineInput = gapInputs[0];
+                this.lineInput.dataset.expected = expectedGaps;
                 gapInputs[0].focus();
             }
 
@@ -474,7 +496,7 @@ class EditorScreen extends HTMLElement {
 
         if (!isExam) {
             const hintRow = createHintLine('    '.repeat(activeLine.indent) + activeLine.text);
-            if (!hintVisible) hintRow.style.display = 'none';
+            if (!this.hintVisible) hintRow.style.display = 'none';
             codeEl.appendChild(hintRow);
         }
 
@@ -482,33 +504,33 @@ class EditorScreen extends HTMLElement {
         const content = row.querySelector('.msv-content');
         content.textContent = '    '.repeat(activeLine.indent);
 
-        lineInput = document.createElement('textarea');
-        lineInput.className = 'msv-input';
-        lineInput.style.width = '100%';
-        lineInput.style.height = 'auto';
-        lineInput.style.minHeight = '26px';
-        lineInput.style.textAlign = 'left';
-        lineInput.style.resize = 'none';
-        lineInput.style.overflow = 'hidden';
-        lineInput.style.padding = '2px 6px';
-        lineInput.style.fontFamily = "'Fira Code', monospace";
-        lineInput.style.fontSize = '13px';
-        lineInput.style.lineHeight = '1.7';
-        lineInput.style.whiteSpace = 'pre';
-        lineInput.style.tabSize = '4';
-        lineInput.spellcheck = false;
-        lineInput.autocomplete = 'off';
-        lineInput.dataset.expected = activeLine.text;
-        content.appendChild(lineInput);
+        this.lineInput = document.createElement('textarea');
+        this.lineInput.className = 'msv-input';
+        this.lineInput.style.width = '100%';
+        this.lineInput.style.height = 'auto';
+        this.lineInput.style.minHeight = '26px';
+        this.lineInput.style.textAlign = 'left';
+        this.lineInput.style.resize = 'none';
+        this.lineInput.style.overflow = 'hidden';
+        this.lineInput.style.padding = '2px 6px';
+        this.lineInput.style.fontFamily = "'Fira Code', monospace";
+        this.lineInput.style.fontSize = '13px';
+        this.lineInput.style.lineHeight = '1.7';
+        this.lineInput.style.whiteSpace = 'pre';
+        this.lineInput.style.tabSize = '4';
+        this.lineInput.spellcheck = false;
+        this.lineInput.autocomplete = 'off';
+        this.lineInput.dataset.expected = activeLine.text;
+        content.appendChild(this.lineInput);
 
         codeEl.appendChild(row);
         codeEl.scrollTop = codeEl.scrollHeight;
 
-        lineInput.focus();
+        this.lineInput.focus();
 
-        lineInput.addEventListener('keydown', (e) => {
-            handleAutoClose(e, lineInput);
-            handleAutoBackspace(e, lineInput);
+        this.lineInput.addEventListener('keydown', (e) => {
+            handleAutoClose(e, this.lineInput);
+            handleAutoBackspace(e, this.lineInput);
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 e.stopPropagation();
@@ -516,32 +538,32 @@ class EditorScreen extends HTMLElement {
             }
         });
 
-        lineInput.addEventListener('input', () => {
-            lineInput.style.height = 'auto';
-            lineInput.style.height = lineInput.scrollHeight + 'px';
+        this.lineInput.addEventListener('input', () => {
+            this.lineInput.style.height = 'auto';
+            this.lineInput.style.height = this.lineInput.scrollHeight + 'px';
         });
     }
 
     checkLineAnswer() {
         if (state.currentIdx >= state.lines.length) return;
-        if (!lineInput || waitingForRetry) return;
+        if (!this.lineInput || this.waitingForRetry) return;
 
-        const isExam = editorMode === 'easy-exam' || editorMode === 'real-exam' || editorMode === 'block-exam' || editorMode === 'block-easy-exam';
-        const isBlockExam = editorMode === 'block-exam' || editorMode === 'block-easy-exam';
+        const isExam = this.editorMode === 'easy-exam' || this.editorMode === 'real-exam' || this.editorMode === 'block-exam' || this.editorMode === 'block-easy-exam';
+        const isBlockExam = this.editorMode === 'block-exam' || this.editorMode === 'block-easy-exam';
 
         let isCorrect;
-        if (editorMode === 'easy-exam' || editorMode === 'block-easy-exam') {
+        if (this.editorMode === 'easy-exam' || this.editorMode === 'block-easy-exam') {
             const gaps = this.querySelectorAll('.gap-input');
             const got = Array.from(gaps).map(g => g.value.trim()).join(' ');
-            const expected = lineInput.dataset.expected;
+            const expected = this.lineInput.dataset.expected;
             isCorrect = got.toLowerCase() === expected.toLowerCase();
         } else {
-            const got = stripComments(lineInput.value);
-            const expected = stripComments(lineInput.dataset.expected);
+            const got = stripComments(this.lineInput.value);
+            const expected = stripComments(this.lineInput.dataset.expected);
             isCorrect = got.toLowerCase() === expected.toLowerCase();
             if (isCorrect) {
-                const raw = lineInput.value.replace(/\s+/g, ' ').trim();
-                const rawExp = lineInput.dataset.expected.replace(/\s+/g, ' ').trim();
+                const raw = this.lineInput.value.replace(/\s+/g, ' ').trim();
+                const rawExp = this.lineInput.dataset.expected.replace(/\s+/g, ' ').trim();
                 if ((raw.includes('//') || raw.includes('/*')) && !rawExp.includes('//') && !rawExp.includes('/*')) {
                     checkAchievement('general_wrote_comment', true);
                 }
@@ -559,16 +581,16 @@ class EditorScreen extends HTMLElement {
             if (!isExam) {
                 const xp = state.sessionNoHints ? 10 : 6;
                 addXP(xp);
-                sessionXP += xp;
+                this.sessionXP += xp;
                 this.showXPFloat('+' + xp);
 
                 delete state.failedLines[state.currentIdx];
             }
 
-            if (editorMode === 'review' || editorMode === 'quick' || editorMode === 'block') {
-                reviewCorrectCount++;
-                if (reviewCorrectCount >= 5) {
-                    checkAchievement(modePrefix() + '_review_5', true);
+            if (this.editorMode === 'review' || this.editorMode === 'quick' || this.editorMode === 'block') {
+                this.reviewCorrectCount++;
+                if (this.reviewCorrectCount >= 5) {
+                    checkAchievement(this.modePrefix() + '_review_5', true);
                 }
             }
 
@@ -577,7 +599,7 @@ class EditorScreen extends HTMLElement {
             checkAchievement('general_streak_7', state.streak >= 7);
             checkAchievement('general_first_line', true);
             checkAchievement('general_ten_streak', state.consecutiveCorrect >= 10);
-            const pfx = modePrefix();
+            const pfx = this.modePrefix();
             const quizLines = state.lines.filter(l => l.quiz).length;
             const completed = state.completedLines.size;
             checkAchievement(pfx + '_half_file', completed >= Math.floor(quizLines / 2));
@@ -590,25 +612,25 @@ class EditorScreen extends HTMLElement {
                     const bi = state.blocks.indexOf(block);
                     if (block.lines.every(li => state.completedLines.has(li))) {
                         addXP(50);
-                        sessionXP += 50;
+                        this.sessionXP += 50;
                         if (!state.blockStars[bi]) state.blockStars[bi] = 1;
                         if (state.sessionNoHints && state.blockStars[bi] < 2) state.blockStars[bi] = 2;
                         checkAchievement('general_first_block', true);
-                        checkAchievement(modePrefix() + '_block_' + bi, true, block.name);
+                        checkAchievement(this.modePrefix() + '_block_' + bi, true, block.name);
                     }
                 }
             }
 
-            if (editorMode === 'easy-exam' || editorMode === 'block-easy-exam') {
+            if (this.editorMode === 'easy-exam' || this.editorMode === 'block-easy-exam') {
                 this.querySelectorAll('.gap-input').forEach(inp => {
                     inp.style.borderColor = 'var(--green)';
                     inp.style.background = 'rgba(35,197,82,.15)';
                     inp.disabled = true;
                 });
-            } else if (lineInput) {
-                lineInput.style.borderColor = 'var(--green)';
-                lineInput.style.background = 'rgba(35,197,82,.15)';
-                lineInput.disabled = true;
+            } else if (this.lineInput) {
+                this.lineInput.style.borderColor = 'var(--green)';
+                this.lineInput.style.background = 'rgba(35,197,82,.15)';
+                this.lineInput.disabled = true;
             }
             this.querySelector('#btn-check').classList.add('hidden');
             this.querySelector('#btn-solution').classList.add('hidden');
@@ -617,25 +639,25 @@ class EditorScreen extends HTMLElement {
             state.consecutiveCorrect = 0;
 
             if (isExam) {
-                examErrors++;
+                this.examErrors++;
                 let got, expected;
-                if (editorMode === 'easy-exam' || editorMode === 'block-easy-exam') {
+                if (this.editorMode === 'easy-exam' || this.editorMode === 'block-easy-exam') {
                     const gaps = this.querySelectorAll('.gap-input');
                     got = Array.from(gaps).map(g => g.value.trim()).join(' ');
-                    expected = lineInput.dataset.expected;
+                    expected = this.lineInput.dataset.expected;
                 } else {
-                    got = lineInput.value.replace(/\s+/g, ' ').trim();
-                    expected = lineInput.dataset.expected.replace(/\s+/g, ' ').trim();
+                    got = this.lineInput.value.replace(/\s+/g, ' ').trim();
+                    expected = this.lineInput.dataset.expected.replace(/\s+/g, ' ').trim();
                 }
                 this.showDiff(got, expected);
-                waitingForRetry = true;
-                retryCleanup = (editorMode === 'block-exam' || editorMode === 'block-easy-exam') ? () => {
-                    const block = state.blocks[examBlockIndex];
+                this.waitingForRetry = true;
+                this.retryCleanup = (this.editorMode === 'block-exam' || this.editorMode === 'block-easy-exam') ? () => {
+                    const block = state.blocks[this.examBlockIndex];
                     if (!block) { switchTab('dashboard'); return; }
                     const blockQuizLines = block.lines.filter(li => state.lines[li].quiz);
-                    reviewQueue = [...blockQuizLines];
-                    if (reviewQueue.length === 0) { switchTab('dashboard'); return; }
-                    state.currentIdx = reviewQueue.shift();
+                    this.reviewQueue = [...blockQuizLines];
+                    if (this.reviewQueue.length === 0) { switchTab('dashboard'); return; }
+                    state.currentIdx = this.reviewQueue.shift();
                     this.renderEditor();
                 } : () => {
                     state.currentIdx = 0;
@@ -648,16 +670,16 @@ class EditorScreen extends HTMLElement {
                 state.sessionNoHints = false;
                 state.save();
 
-                this.showDiff(stripComments(lineInput.value), stripComments(lineInput.dataset.expected));
-                waitingForRetry = true;
-                retryCleanup = () => this.renderEditor();
+                this.showDiff(stripComments(this.lineInput.value), stripComments(this.lineInput.dataset.expected));
+                this.waitingForRetry = true;
+                this.retryCleanup = () => this.renderEditor();
             }
         }
     }
 
     showDiff(typed, expected) {
-        if (!lineInput) return;
-        const row = lineInput.closest('.msv-content');
+        if (!this.lineInput) return;
+        const row = this.lineInput.closest('.msv-content');
         if (!row) return;
         row.innerHTML = '';
 
@@ -741,51 +763,51 @@ class EditorScreen extends HTMLElement {
         row.appendChild(expectLine);
         row.appendChild(diffLine);
 
-        const isExam = editorMode === 'easy-exam' || editorMode === 'real-exam' || editorMode === 'block-exam' || editorMode === 'block-easy-exam';
+        const isExam = this.editorMode === 'easy-exam' || this.editorMode === 'real-exam' || this.editorMode === 'block-exam' || this.editorMode === 'block-easy-exam';
         const msg = document.createElement('div');
         msg.style.cssText = 'font-size:11px;color:#f48771;margin-top:2px;';
-        msg.textContent = editorMode === 'block-exam' ? 'Enter para reiniciar función' : isExam ? 'Enter para reiniciar examen' : 'Enter para repetir';
+        msg.textContent = this.editorMode === 'block-exam' ? 'Enter para reiniciar función' : isExam ? 'Enter para reiniciar examen' : 'Enter para repetir';
         row.appendChild(msg);
     }
 
     handleSolution() {
-        if (!lineInput) return;
-        if (editorMode === 'easy-exam' || editorMode === 'real-exam' || editorMode === 'block-exam' || editorMode === 'block-easy-exam') return;
+        if (!this.lineInput) return;
+        if (this.editorMode === 'easy-exam' || this.editorMode === 'real-exam' || this.editorMode === 'block-exam' || this.editorMode === 'block-easy-exam') return;
         state.sessionNoHints = false;
-        lineInput.value = lineInput.dataset.expected;
-        lineInput.disabled = true;
-        lineInput.style.borderColor = 'var(--blue)';
-        lineInput.style.background = 'rgba(47,128,237,.15)';
+        this.lineInput.value = this.lineInput.dataset.expected;
+        this.lineInput.disabled = true;
+        this.lineInput.style.borderColor = 'var(--blue)';
+        this.lineInput.style.background = 'rgba(47,128,237,.15)';
         state.solutionLines[state.currentIdx] = true;
         this.querySelector('#btn-check').classList.add('hidden');
         this.querySelector('#btn-solution').classList.add('hidden');
-        waitingForRetry = true;
-        retryCleanup = () => this.renderEditor();
+        this.waitingForRetry = true;
+        this.retryCleanup = () => this.renderEditor();
         state.save();
     }
 
     advanceLine() {
-        const isExam = editorMode === 'easy-exam' || editorMode === 'real-exam';
-        const isBlockExam = editorMode === 'block-exam' || editorMode === 'block-easy-exam';
+        const isExam = this.editorMode === 'easy-exam' || this.editorMode === 'real-exam';
+        const isBlockExam = this.editorMode === 'block-exam' || this.editorMode === 'block-easy-exam';
 
         if (isBlockExam) {
-            if (reviewQueue.length > 0) {
-                state.currentIdx = reviewQueue.shift();
+            if (this.reviewQueue.length > 0) {
+                state.currentIdx = this.reviewQueue.shift();
                 state.save();
                 this.renderEditor();
             } else {
                 state.save();
-                const bi = examBlockIndex;
+                const bi = this.examBlockIndex;
                 if (bi >= 0) {
                     state.examRealPassed.add(bi);
                     const block = state.blocks[bi];
                     if (block && block.lines.every(li => state.completedLines.has(li))) {
                         addXP(50);
-                        sessionXP += 50;
+                        this.sessionXP += 50;
                         if (!state.blockStars[bi]) state.blockStars[bi] = 1;
                         if (state.sessionNoHints && state.blockStars[bi] < 2) state.blockStars[bi] = 2;
                         checkAchievement('general_first_block', true);
-                        checkAchievement(modePrefix() + '_block_' + bi, true, block.name);
+                        checkAchievement(this.modePrefix() + '_block_' + bi, true, block.name);
                     }
                     state.save();
                 }
@@ -799,7 +821,7 @@ class EditorScreen extends HTMLElement {
             skipToNextQuiz();
             if (state.currentIdx >= state.lines.length) {
                 state.save();
-                checkAchievement(modePrefix() + '_no_hints', true);
+                checkAchievement(this.modePrefix() + '_no_hints', true);
                 this.showExamPassed();
             } else {
                 state.save();
@@ -808,16 +830,16 @@ class EditorScreen extends HTMLElement {
             return;
         }
 
-        if (editorMode === 'review' || editorMode === 'quick' || editorMode === 'block') {
-            if (reviewQueue.length > 0) {
-                state.currentIdx = reviewQueue.shift();
+        if (this.editorMode === 'review' || this.editorMode === 'quick' || this.editorMode === 'block') {
+            if (this.reviewQueue.length > 0) {
+                state.currentIdx = this.reviewQueue.shift();
             } else {
-                if (editorMode === 'quick') {
+                if (this.editorMode === 'quick') {
                     state.markSessionActive();
                     addXP(20);
-                    sessionXP += 20;
+                    this.sessionXP += 20;
                 }
-                checkAchievement(modePrefix() + '_no_hints', state.sessionNoHints);
+                checkAchievement(this.modePrefix() + '_no_hints', state.sessionNoHints);
                 switchTab('dashboard');
                 return;
             }
@@ -828,9 +850,9 @@ class EditorScreen extends HTMLElement {
                 const totalQuiz = state.lines.filter(l => l.quiz).length;
                 const excludedQuiz = state.lines.filter((l, i) => l.quiz && isLineExcluded(i)).length;
                 if (state.completedLines.size >= totalQuiz - excludedQuiz) {
-                    checkAchievement(modePrefix() + '_full_file', true);
+                    checkAchievement(this.modePrefix() + '_full_file', true);
                     addXP(500);
-                    sessionXP += 500;
+                    this.sessionXP += 500;
                     this.showComplete();
                     return;
                 }
@@ -842,13 +864,13 @@ class EditorScreen extends HTMLElement {
     }
 
     showExamPassed() {
-        const isEasy = editorMode === 'easy-exam' || editorMode === 'block-easy-exam';
-        const isBlock = editorMode === 'block-exam' || editorMode === 'block-easy-exam';
+        const isEasy = this.editorMode === 'easy-exam' || this.editorMode === 'block-easy-exam';
+        const isBlock = this.editorMode === 'block-exam' || this.editorMode === 'block-easy-exam';
         const codeEl = this.querySelector('#editor-code');
         codeEl.innerHTML = '';
 
         state.lines.forEach((l, i) => { if (l.quiz) state.completedLines.add(i); });
-        if (editorMode === 'real-exam' && examErrors === 0) {
+        if (this.editorMode === 'real-exam' && this.examErrors === 0) {
             state.blocks.forEach((_, bi) => state.examRealPassed.add(bi));
         }
         state.save();
@@ -858,23 +880,23 @@ class EditorScreen extends HTMLElement {
         let icon = '🎉', title, subtitle;
         if (isBlock) {
             icon = '🎯';
-            const name = state.blocks[examBlockIndex]?.name || 'Función';
+            const name = state.blocks[this.examBlockIndex]?.name || 'Función';
             title = `<span style="color:var(--green)">${name} dominada</span>`;
-            subtitle = examErrors === 0 ? '<div style="color:var(--yellow);font-size:13px">✅ Sin errores</div>' : '';
+            subtitle = this.examErrors === 0 ? '<div style="color:var(--yellow);font-size:13px">✅ Sin errores</div>' : '';
         } else if (isEasy) {
             icon = '📝';
             title = 'Examen fácil completado';
             subtitle = '';
         } else {
             title = '¡Examen real superado!';
-            subtitle = examErrors === 0 ? '<div style="color:var(--yellow);font-size:13px">✅ Código dominado sin errores</div>' : '';
+            subtitle = this.examErrors === 0 ? '<div style="color:var(--yellow);font-size:13px">✅ Código dominado sin errores</div>' : '';
         }
-        const isBlockExam = editorMode === 'block-exam' || editorMode === 'block-easy-exam';
+        const isBlockExam = this.editorMode === 'block-exam' || this.editorMode === 'block-easy-exam';
         el.innerHTML = `
             <div class="text-5xl">${icon}</div>
             <div class="text-xl font-bold" style="color:var(--green)">${title}</div>
             ${subtitle}
-            <div class="text-sm" style="color:#a0a0a0">${examErrors} errores</div>
+            <div class="text-sm" style="color:#a0a0a0">${this.examErrors} errores</div>
             <button class="w-48 py-3 rounded-xl font-bold text-white" style="background:var(--blue)" id="exam-return">Volver al inicio</button>
             <button class="w-48 py-3 rounded-xl font-bold" style="background:var(--bg-card);color:#a0a0a0" id="exam-repeat">Repetir examen</button>
         `;
@@ -884,7 +906,7 @@ class EditorScreen extends HTMLElement {
         el.querySelector('#exam-return').addEventListener('click', () => switchTab('dashboard'));
         el.querySelector('#exam-repeat').addEventListener('click', () => {
             window.dispatchEvent(new CustomEvent('start-mode', {
-                detail: isBlockExam ? { mode: editorMode, blockIndex: examBlockIndex } : { mode: editorMode }
+                detail: isBlockExam ? { mode: this.editorMode, blockIndex: this.examBlockIndex } : { mode: this.editorMode }
             }));
         });
     }
@@ -906,7 +928,7 @@ class EditorScreen extends HTMLElement {
             <div class="flex-1 p-4 pb-20 overflow-y-auto items-center justify-center text-center" style="display:flex;flex-direction:column">
                 <div class="animate-pop">
                     <div class="text-6xl mb-4">🏆</div>
-                    <h2 class="text-2xl font-bold mb-2" style="color:#f5f5f5;font-size:23px;font-weight:800">mini_serv.c reconstruido entero</h2>
+                    <h2 class="text-2xl font-bold mb-2" style="color:#f5f5f5;font-size:23px;font-weight:800">Código reconstruido entero</h2>
                     <p class="text-sm mb-6" style="color:#a0a0a0;font-size:15px;">Ya no estás leyendo código. Lo estás sacando de memoria.</p>
                     <div class="card text-left mb-4 space-y-2">
                         <div class="flex justify-between"><span style="color:#a0a0a0">Líneas dominadas</span><span class="font-bold">${state.completedLines.size}/${totalQuiz}</span></div>

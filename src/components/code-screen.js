@@ -3,8 +3,13 @@ import { tokenize, getTokenClass } from '../parser.js';
 
 class CodeScreen extends HTMLElement {
     connectedCallback() {
-        this.addEventListener('screen-active', () => this.render());
+        this._boundRender = () => this.render();
+        this.addEventListener('screen-active', this._boundRender);
         this.render();
+    }
+
+    disconnectedCallback() {
+        this.removeEventListener('screen-active', this._boundRender);
     }
 
     render() {

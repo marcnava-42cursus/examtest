@@ -24,6 +24,18 @@ if (savedData) {
 
 state.notify();
 
+function refreshIcons() {
+    if (window.lucide) {
+        if (window._lucidePending) cancelAnimationFrame(window._lucidePending);
+        window._lucidePending = requestAnimationFrame(() => {
+            lucide.createIcons();
+            window._lucidePending = null;
+        });
+    }
+}
+
+window.addEventListener('state-changed', refreshIcons);
+
 const dataHandler = {
     onDataChanged(data) {
         if (data.length > 0 && !state.rawCode) {

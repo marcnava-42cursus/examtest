@@ -1,13 +1,14 @@
 const containerId = 'toast-container';
 
+let container = null;
+
 function getContainer() {
-    let el = document.getElementById(containerId);
-    if (!el) {
-        el = document.createElement('div');
-        el.id = containerId;
-        document.body.appendChild(el);
+    if (!container || !document.body.contains(container)) {
+        container = document.createElement('div');
+        container.id = containerId;
+        document.body.appendChild(container);
     }
-    return el;
+    return container;
 }
 
 export function showToast(msg, type) {

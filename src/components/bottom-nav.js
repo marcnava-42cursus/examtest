@@ -3,7 +3,12 @@ import { switchTab } from '../router.js';
 class BottomNav extends HTMLElement {
     connectedCallback() {
         this.render();
-        window.addEventListener('state-changed', () => this.updateActive());
+        this._boundUpdate = () => this.updateActive();
+        window.addEventListener('state-changed', this._boundUpdate);
+    }
+
+    disconnectedCallback() {
+        window.removeEventListener('state-changed', this._boundUpdate);
     }
 
     render() {
@@ -41,7 +46,6 @@ class BottomNav extends HTMLElement {
             });
         });
 
-        if (window.lucide) lucide.createIcons();
     }
 
     updateActive() {
