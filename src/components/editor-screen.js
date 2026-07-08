@@ -679,11 +679,31 @@ class EditorScreen extends HTMLElement {
             } else {
                 state.failedLines[state.currentIdx] = (state.failedLines[state.currentIdx] || 0) + 1;
                 state.sessionNoHints = false;
-                state.save();
 
                 this.showDiff(stripComments(this.lineInput.value), stripComments(this.lineInput.dataset.expected));
                 this.waitingForRetry = true;
-                this.retryCleanup = () => this.renderEditor();
+
+                if (this.editorMode === 'block') {
+                    const block = state.blocks[this.examBlockIndex];
+                    if (block) {
+                        block.lines.forEach(li => {
+                            state.completedLines.delete(li);
+                            state.modeCompleted[this.modePrefix()].delete(li);
+                        });
+                        const blockQuizLines = block.lines.filter(li => state.lines[li].quiz);
+                        this.reviewQueue = [...blockQuizLines];
+                        if (this.reviewQueue.length === 0) { switchTab('dashboard'); return; }
+                        this.retryCleanup = () => {
+                            state.currentIdx = this.reviewQueue.shift();
+                            this.renderEditor();
+                        };
+                    } else {
+                        this.retryCleanup = () => this.renderEditor();
+                    }
+                } else {
+                    this.retryCleanup = () => this.renderEditor();
+                }
+                state.save();
             }
         }
     }

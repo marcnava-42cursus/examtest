@@ -126,19 +126,9 @@ class MapScreen extends HTMLElement {
             `;
             if (!isLocked) {
                 node.addEventListener('click', () => {
-                    if (mode === 'practice') {
-                        window.dispatchEvent(new CustomEvent('start-mode', {
-                            detail: { mode: 'block', blockIndex: bi }
-                        }));
-                    } else if (mode === 'easy-exam') {
-                        window.dispatchEvent(new CustomEvent('start-mode', {
-                            detail: { mode: 'block-easy-exam', blockIndex: bi }
-                        }));
-                    } else {
-                        window.dispatchEvent(new CustomEvent('start-mode', {
-                            detail: { mode: 'block-exam', blockIndex: bi }
-                        }));
-                    }
+                    window.dispatchEvent(new CustomEvent('start-mode', {
+                        detail: { mode: 'block', blockIndex: bi }
+                    }));
                 });
             }
             this._container.appendChild(node);

@@ -5,7 +5,7 @@ export function switchTab(name) {
     const screen = document.getElementById('screen-' + name);
     if (screen) {
         screen.classList.add('active');
-        screen.dispatchEvent(new CustomEvent('screen-active'));
+        screen.dispatchEvent(new CustomEvent('screen-active', { bubbles: true }));
     }
     document.querySelectorAll('.nav-tab').forEach(t => {
         t.classList.toggle('active', t.dataset.tab === name);
