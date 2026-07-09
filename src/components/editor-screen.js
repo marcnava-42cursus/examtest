@@ -324,7 +324,7 @@ class EditorScreen extends HTMLElement {
             this.examBlockIndex = bi;
             const blockQuizLines = state.blocks[bi].lines.filter(li => state.lines[li].quiz && !isLineExcluded(li));
             if (blockQuizLines.length === 0) { switchTab('dashboard'); return; }
-            this.reviewQueue = [...blockQuizLines].sort(() => Math.random() - 0.5);
+            this.reviewQueue = [...blockQuizLines];
             state.currentIdx = this.reviewQueue.shift();
         } else if (mode === 'block') {
             const bi = detail.blockIndex;
@@ -334,7 +334,7 @@ class EditorScreen extends HTMLElement {
             if (state.excludedBlocks.has(bi) || blockQuizLines.every(li => state.completedLines.has(li))) {
                 return;
             }
-            this.reviewQueue = [...blockQuizLines].sort(() => Math.random() - 0.5);
+            this.reviewQueue = [...blockQuizLines];
             if (this.reviewQueue.length === 0) return;
             state.currentIdx = this.reviewQueue.shift();
         }
@@ -659,7 +659,7 @@ class EditorScreen extends HTMLElement {
                     const block = state.blocks[this.examBlockIndex];
                     if (!block) { switchTab('dashboard'); return; }
                     const blockQuizLines = block.lines.filter(li => state.lines[li].quiz && !isLineExcluded(li));
-                    this.reviewQueue = [...blockQuizLines].sort(() => Math.random() - 0.5);
+                    this.reviewQueue = [...blockQuizLines];
                     if (this.reviewQueue.length === 0) { switchTab('dashboard'); return; }
                     state.currentIdx = this.reviewQueue.shift();
                     this.renderEditor();
@@ -684,7 +684,7 @@ class EditorScreen extends HTMLElement {
                             state.modeCompleted[this.modePrefix()].delete(li);
                         });
                         const blockQuizLines = block.lines.filter(li => state.lines[li].quiz && !isLineExcluded(li));
-                        this.reviewQueue = [...blockQuizLines].sort(() => Math.random() - 0.5);
+                        this.reviewQueue = [...blockQuizLines];
                         if (this.reviewQueue.length === 0) { switchTab('dashboard'); return; }
                         this.retryCleanup = () => {
                             state.currentIdx = this.reviewQueue.shift();
