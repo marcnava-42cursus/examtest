@@ -424,7 +424,7 @@ class EditorScreen extends HTMLElement {
         const activeLine = state.lines[state.currentIdx];
 
         if (this.editorMode === 'easy-exam' || this.editorMode === 'block-easy-exam') {
-            const gaps = generateGaps(activeLine.text, state.currentIdx);
+            const gaps = generateGaps(activeLine.text, state.currentIdx + Date.now());
             const gapRow = createLine(state.currentIdx + 1, true);
             const gapContent = gapRow.querySelector('.msv-content');
             gapContent.textContent = '    '.repeat(activeLine.indent);
