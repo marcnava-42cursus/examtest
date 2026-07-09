@@ -4,7 +4,8 @@ import { tokenize, getTokenClass } from '../parser.js';
 class CodeScreen extends HTMLElement {
     connectedCallback() {
         this._boundRender = () => this.render();
-        this._boundExpand = () => {
+        this._boundExpand = (e) => {
+            if (e.target !== this) return;
             const container = this.closest('[class*="max-w-lg"]');
             if (container && !this._expanded) {
                 this._savedMaxWidth = container.style.maxWidth;
