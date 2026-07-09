@@ -322,7 +322,7 @@ class EditorScreen extends HTMLElement {
             const bi = detail.blockIndex;
             if (bi === undefined || !state.blocks[bi]) { switchTab('dashboard'); return; }
             this.examBlockIndex = bi;
-            const blockQuizLines = state.blocks[bi].lines.filter(li => state.lines[li].quiz);
+            const blockQuizLines = state.blocks[bi].lines.filter(li => state.lines[li].quiz && !isLineExcluded(li));
             if (blockQuizLines.length === 0) { switchTab('dashboard'); return; }
             this.reviewQueue = [...blockQuizLines];
             state.currentIdx = this.reviewQueue.shift();
@@ -330,7 +330,7 @@ class EditorScreen extends HTMLElement {
             const bi = detail.blockIndex;
             this.examBlockIndex = bi;
             const block = state.blocks[bi];
-            const blockQuizLines = block.lines.filter(li => state.lines[li].quiz);
+            const blockQuizLines = block.lines.filter(li => state.lines[li].quiz && !isLineExcluded(li));
             if (state.excludedBlocks.has(bi) || blockQuizLines.every(li => state.completedLines.has(li))) {
                 return;
             }
@@ -658,7 +658,7 @@ class EditorScreen extends HTMLElement {
                 this.retryCleanup = (this.editorMode === 'block-exam' || this.editorMode === 'block-easy-exam') ? () => {
                     const block = state.blocks[this.examBlockIndex];
                     if (!block) { switchTab('dashboard'); return; }
-                    const blockQuizLines = block.lines.filter(li => state.lines[li].quiz);
+                    const blockQuizLines = block.lines.filter(li => state.lines[li].quiz && !isLineExcluded(li));
                     this.reviewQueue = [...blockQuizLines];
                     if (this.reviewQueue.length === 0) { switchTab('dashboard'); return; }
                     state.currentIdx = this.reviewQueue.shift();
@@ -683,7 +683,7 @@ class EditorScreen extends HTMLElement {
                             state.completedLines.delete(li);
                             state.modeCompleted[this.modePrefix()].delete(li);
                         });
-                        const blockQuizLines = block.lines.filter(li => state.lines[li].quiz);
+                        const blockQuizLines = block.lines.filter(li => state.lines[li].quiz && !isLineExcluded(li));
                         this.reviewQueue = [...blockQuizLines];
                         if (this.reviewQueue.length === 0) { switchTab('dashboard'); return; }
                         this.retryCleanup = () => {
