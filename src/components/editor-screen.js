@@ -198,6 +198,10 @@ class EditorScreen extends HTMLElement {
         return 'practice';
     }
 
+    blockQuizLines(block) {
+        return block ? block.lines.filter(li => state.lines[li]?.quiz && !isLineExcluded(li)) : [];
+    }
+
     connectedCallback() {
         this._boundStartMode = (e) => this.startMode(e.detail);
         this._boundScreenActive = () => {
@@ -322,7 +326,7 @@ class EditorScreen extends HTMLElement {
             const bi = detail.blockIndex;
             if (bi === undefined || !state.blocks[bi]) { switchTab('dashboard'); return; }
             this.examBlockIndex = bi;
-            const blockQuizLines = state.blocks[bi].lines.filter(li => state.lines[li].quiz && !isLineExcluded(li));
+            const blockQuizLines = this.blockQuizLines(state.blocks[bi]);
             if (blockQuizLines.length === 0) { switchTab('dashboard'); return; }
             this.reviewQueue = [...blockQuizLines];
             state.currentIdx = this.reviewQueue.shift();
@@ -330,7 +334,7 @@ class EditorScreen extends HTMLElement {
             const bi = detail.blockIndex;
             this.examBlockIndex = bi;
             const block = state.blocks[bi];
-            const blockQuizLines = block.lines.filter(li => state.lines[li].quiz && !isLineExcluded(li));
+            const blockQuizLines = this.blockQuizLines(block);
             if (state.excludedBlocks.has(bi) || blockQuizLines.every(li => state.completedLines.has(li))) {
                 return;
             }
@@ -367,8 +371,9 @@ class EditorScreen extends HTMLElement {
         const isBlockFlow = this.editorMode === 'block' || this.editorMode === 'block-exam' || this.editorMode === 'block-easy-exam';
         if (isBlockFlow && this.examBlockIndex >= 0) {
             const block = state.blocks[this.examBlockIndex];
-            total = block ? block.lines.filter(li => state.lines[li].quiz).length : 0;
-            doneCount = block ? block.lines.filter(li => state.completedLines.has(li)).length : 0;
+            const blockQuizLines = this.blockQuizLines(block);
+            total = blockQuizLines.length;
+            doneCount = blockQuizLines.filter(li => state.completedLines.has(li)).length;
         } else {
             total = state.lines.filter(l => l.quiz).length;
             doneCount = state.modeCompleted[this.modePrefix()].size;
@@ -614,7 +619,8 @@ class EditorScreen extends HTMLElement {
                 const block = state.blocks.find(b => b.lines.includes(state.currentIdx));
                 if (block) {
                     const bi = state.blocks.indexOf(block);
-                    if (block.lines.every(li => state.completedLines.has(li))) {
+                    const blockQuizLines = this.blockQuizLines(block);
+                    if (blockQuizLines.length > 0 && blockQuizLines.every(li => state.completedLines.has(li))) {
                         addXP(50);
                         this.sessionXP += 50;
                         if (!state.blockStars[bi]) state.blockStars[bi] = 1;
@@ -658,7 +664,7 @@ class EditorScreen extends HTMLElement {
                 this.retryCleanup = (this.editorMode === 'block-exam' || this.editorMode === 'block-easy-exam') ? () => {
                     const block = state.blocks[this.examBlockIndex];
                     if (!block) { switchTab('dashboard'); return; }
-                    const blockQuizLines = block.lines.filter(li => state.lines[li].quiz && !isLineExcluded(li));
+                    const blockQuizLines = this.blockQuizLines(block);
                     this.reviewQueue = [...blockQuizLines];
                     if (this.reviewQueue.length === 0) { switchTab('dashboard'); return; }
                     state.currentIdx = this.reviewQueue.shift();
@@ -683,7 +689,7 @@ class EditorScreen extends HTMLElement {
                             state.completedLines.delete(li);
                             state.modeCompleted[this.modePrefix()].delete(li);
                         });
-                        const blockQuizLines = block.lines.filter(li => state.lines[li].quiz && !isLineExcluded(li));
+                        const blockQuizLines = this.blockQuizLines(block);
                         this.reviewQueue = [...blockQuizLines];
                         if (this.reviewQueue.length === 0) { switchTab('dashboard'); return; }
                         this.retryCleanup = () => {
@@ -825,7 +831,8 @@ class EditorScreen extends HTMLElement {
                 if (bi >= 0) {
                     state.examRealPassed.add(bi);
                     const block = state.blocks[bi];
-                    if (block && block.lines.every(li => state.completedLines.has(li))) {
+                    const blockQuizLines = this.blockQuizLines(block);
+                    if (blockQuizLines.length > 0 && blockQuizLines.every(li => state.completedLines.has(li))) {
                         addXP(50);
                         this.sessionXP += 50;
                         if (!state.blockStars[bi]) state.blockStars[bi] = 1;
@@ -899,11 +906,13 @@ class EditorScreen extends HTMLElement {
         const codeEl = this.querySelector('#editor-code');
         codeEl.innerHTML = '';
 
-        state.lines.forEach((l, i) => {
-            if (l.quiz) {
-                state.completedLines.add(i);
-                state.modeCompleted[this.modePrefix()].add(i);
-            }
+        const completedExamLines = isBlock
+            ? this.blockQuizLines(state.blocks[this.examBlockIndex])
+            : state.lines.map((l, i) => l.quiz && !isLineExcluded(i) ? i : -1).filter(i => i >= 0);
+
+        completedExamLines.forEach(i => {
+            state.completedLines.add(i);
+            state.modeCompleted[this.modePrefix()].add(i);
         });
         if (this.editorMode === 'real-exam' && this.examErrors === 0) {
             state.blocks.forEach((_, bi) => state.examRealPassed.add(bi));
